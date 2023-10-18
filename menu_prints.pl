@@ -1,3 +1,6 @@
+:- use_module(library(random)).
+:- use_module(library(system)).
+
 printMainMenu:-
     write(' _________________________________________________________________________'),nl,
     write('|                                                                         |'),nl,

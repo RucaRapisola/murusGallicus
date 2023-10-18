@@ -1,36 +1,34 @@
 :- use_module(library(lists)).
-:- consult(board).
-:- consult(get_input).
+:- use_module(library(random)).
+:- use_module(library(system)).
+:- use_module(library(between)).
 
+% Predicate to get a players move input
+get_move(Player,SoloPeace, StartRow, StartCol, EndRow, EndCol,Board,DeltaRow,DeltaCol,SoloOpponent) :-
+    repeat,
+    format('Player ~w, enter your move (start row, start col, end row, end col): ', [Player]),nl,
+    write('Start row: '), read(StartRow),nl,
+    write('Start Col'),read(StartCol),nl,
+    write('End row'),read(EndRow),nl,
+    write('End Col'),read(EndCol),nl,
+    (valid_move(Player,SoloPeace, StartRow, StartCol, EndRow, EndCol,Board,DeltaRow,DeltaCol,SoloOpponent) -> true ; write('Invalid move, try again.'),nl, fail).
 
-play_game(Board, Player, SoloPeace, Opponent,SoloOpponent) :-
-    (has_value_in_sublists(Player, Board) ->
-        get_move(Player, SoloPeace, StartRow, StartCol, EndRow, EndCol, Board,DeltaRow,DeltaCol,SoloOpponent),
-        ((DeltaRow=2,DeltaRow=2; DeltaRow=2, DeltaCol=0; DeltaRow=0, DeltaCol=2)->
-            move(Board, StartRow, StartCol, EndRow, EndCol, NewBoard, Player, SoloPeace)
-         ;
-            capture_piece(Board,Player,SoloPeace,StartRow,StartCol,EndRow,EndCol,NewBoard)
-        ),
+% Predicate to select a piece at a specific row and column on the board.
+select_piece(Board, Row, Col, Piece) :-
+    nth1(Row, Board, BoardRow),  % Select the row using nth1/3
+    nth1(Col, BoardRow, Piece).  % Select the element in the row using nth1/3
 
-        display_board(NewBoard),
+% Predicate to remove a piece at a specific row and column on the board.
+remove_piece(Board, Row, Col, NewBoard) :-
+    nth1(Row, Board, BoardRow),     % Select the row using nth1/3
+    replace(BoardRow, Col, '   ', NewRow), % Replace the element in the row using replace/4
+    replace(Board, Row, NewRow, NewBoard). % Replace the row in the board using replace/4
 
-        % Check if the player has reached the first row.
-        ((Player = 'O/O', EndRow = 1 ; Player = 'X/X', EndRow = 7) ->
-            format('Player controlling the ~w pieces wins by reaching the opponent´s first row!', [Player]), nl
-        ;
-            % Check for win/draw conditions and update Player based on game rules.
-
-            % Switch to the other player for the next turn.
-            (Player = 'X/X' -> NextPlayer = 'O/O' ; NextPlayer = 'X/X'),
-            (SoloPeace = ' X ' -> NextSoloPeace = ' O ' ; NextSoloPeace = ' X '),
-            (Opponent = 'O/O' -> OtherOpponent = 'X/X' ; OtherOpponent = 'O/O'),
-            (SoloOpponent = ' O ' -> NextSoloOpponent = ' X '; NextSoloOpponent = ' O '),
-
-            % Continue the game with the other player.
-            play_game(NewBoard, NextPlayer, NextSoloPeace, OtherOpponent,NextSoloOpponent))
-    ;
-        format('Player ~w has no valid moves left. Player ~w wins!', [Player, Opponent]), nl
-    ).
+% Predicate to change the value of a cell at a specific row and column in the board.
+change_cell(Board, Row, Col, NewValue, NewBoard) :-
+    nth1(Row, Board, OldRow),        % Select the row using nth1/3
+    replace(OldRow, Col, NewValue, ModifiedRow),  % Replace the element in the row using replace/4
+    replace(Board, Row, ModifiedRow, NewBoard).  % Replace the row in the board using replace/4
 
 % Predicate to make a move. It will replace the piece in the start position with an empty cell and place the piece in the middle and in the end position.
 move(Board, StartRow, StartCol, EndRow, EndCol, NewBoard, Player, SoloPeace) :-
@@ -54,6 +52,13 @@ move(Board, StartRow, StartCol, EndRow, EndCol, NewBoard, Player, SoloPeace) :-
         DestinationPiece2 = SoloPeace-> change_cell(IntermediateBoard, EndRow, EndCol, Player, NewBoard)
     ).
 
+% Helper predicate to replace an element in a list at a given position.
+replace([_|T], 1, X, [X|T]).
+replace([H|T], I, X, [H|R]) :-
+    I > 1,
+    I1 is I - 1,
+    replace(T, I1, X, R).
+
 % Rules of the game to make sure the move that player inserted is valid.
 valid_move(Player, SoloPeace, StartRow, StartCol, EndRow, EndCol,Board,DeltaRow,DeltaCol,SoloOpponent) :-
     % Check if the move is within bounds.
@@ -67,13 +72,18 @@ valid_move(Player, SoloPeace, StartRow, StartCol, EndRow, EndCol,Board,DeltaRow,
     InitialPiece = Player),
 
     % Calculate the absolute row and column differences between start and end positions.
-    DeltaRow is abs(EndRow - StartRow),
-    DeltaCol is abs(EndCol - StartCol),
+    DeltaRow is EndRow - StartRow,
+    DeltaCol is EndCol - StartCol,
     
     % Ensure that the move is either orthogonal or diagonal (DeltaRow and DeltaCol are 0, 1, or 2).
     ((DeltaRow =:= 0, DeltaCol =:= 2 ;  % Orthogonal
      DeltaRow =:= 2, DeltaCol =:= 0 ;  % Orthogonal
-     DeltaRow =:= 2, DeltaCol =:= 2) -> 
+     DeltaRow =:= 2, DeltaCol =:= 2;
+     DeltaRow =:= 2, DeltaCol =:= -2;
+     DeltaRow =:= -2, DeltaCol =:= 2;
+     DeltaRow =:= 0, DeltaCol =:= -2 ;  % Orthogonal
+     DeltaRow =:= -2, DeltaCol =:= 0 ;  % Orthogonal
+     DeltaRow =:= -2, DeltaCol =:= -2) -> 
         % Calculate the middle row and column.
         MiddleRow is (StartRow + EndRow) // 2,
         MiddleCol is (StartCol + EndCol) // 2,
@@ -89,10 +99,25 @@ valid_move(Player, SoloPeace, StartRow, StartCol, EndRow, EndCol,Board,DeltaRow,
     ;
      (DeltaRow =:= 0, DeltaCol =:= 1;  % Orthogonal
       DeltaRow =:= 1, DeltaCol =:= 0;  % Orthogonal
-      DeltaRow =:= 1, DeltaCol =:= 1) ->
+      DeltaRow =:= 1, DeltaCol =:= 1;
+      DeltaRow =:= 1, DeltaCol =:= -1;
+      DeltaRow =:= -1, DeltaCol =:= 1;
+      DeltaRow =:= 0, DeltaCol =:= -1;  % Orthogonal
+      DeltaRow =:= -1, DeltaCol =:= 0;  % Orthogonal
+      DeltaRow =:= -1, DeltaCol =:= -1) ->
         select_piece(Board,EndRow,EndCol,DestinationPiece),
         (DestinationPiece = SoloOpponent)  
     ).
+
+
+% Rule to check if a value is present in any sublist of a list of lists
+has_value_in_sublists(_, []) :- fail.
+has_value_in_sublists(Value, [Sublist | _]) :- has_value(Value, Sublist).
+has_value_in_sublists(Value, [_ | Tail]) :- has_value_in_sublists(Value, Tail).
+
+has_value(_, []) :- fail.
+has_value(Value, [Value | _]).
+has_value(Value, [_ | Tail]) :- has_value(Value, Tail).
 
 capture_piece(Board,Player,SoloPeace,StartRow,StartCol,EndRow,EndCol,NewBoard):-
     remove_piece(Board, StartRow, StartCol, TempBoard),
@@ -101,4 +126,4 @@ capture_piece(Board,Player,SoloPeace,StartRow,StartCol,EndRow,EndCol,NewBoard):-
     select_piece(TempBoard, StartRow, StartCol, DestinationPiece),
     (DestinationPiece = '   ' -> change_cell(TempBoard,StartRow,StartCol,SoloPeace,IntermediateBoard)),
 
-    remove_piece(IntermediateBoard, EndRow, EndCol, NewBoard).            
+    remove_piece(IntermediateBoard, EndRow, EndCol, NewBoard).
